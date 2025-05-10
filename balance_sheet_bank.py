@@ -2,7 +2,7 @@ import pandas as pd
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 from datetime import datetime
-
+from pandas import ExcelWriter
 
 Tk().withdraw()
 
@@ -90,3 +90,35 @@ leaf_df.to_excel(output_path, index=False)
 # print summary (just for checkin the result)
 print(leaf_df[["کد شعبه", "کد نهایی", "عنوان نهایی", "مانده(بد)", "مانده(بس)", "کد فناپ", "کد بانک مرکزی", "نام استان"]])
 print(f"\n✅ خروجی شامل فقط برگ‌ها با مانده صحیح ذخیره شد: {output_path}")
+
+
+
+
+# اضافه کردن کد استان (کد فناپ) به انتهای کد نهایی
+leaf_df["کد نهایی با استان"] = leaf_df["کد نهایی"] + "_" + leaf_df["کد فناپ"].astype(str)
+
+leaf_df["عنوان نهایی با استان"] = leaf_df["عنوان نهایی"] + "_" + leaf_df["نام استان"]
+
+grouped_df = leaf_df.groupby(
+    ["کد نهایی با استان", "عنوان نهایی با استان"], as_index=False
+)[["مانده(بد)", "مانده(بس)", "مانده (بد)", "مانده (بس)"]].sum(min_count=1)
+
+# حذف ردیف‌هایی که هم مانده(بد) و هم مانده(بس) صفر هستند
+grouped_df = grouped_df[~((grouped_df["مانده(بد)"] == 0) & (grouped_df["مانده(بس)"] == 0))]
+
+grouped_df["مانده(بد)_اصلاح‌شده"] = grouped_df["مانده(بد)"].clip(lower=0) + grouped_df["مانده(بس)"].clip(upper=0).abs()
+grouped_df["مانده(بس)_اصلاح‌شده"] = grouped_df["مانده(بس)"].clip(lower=0) + grouped_df["مانده(بد)"].clip(upper=0).abs()
+
+grouped_df["مانده(بد)_اصلاح‌شده"] = grouped_df["مانده(بد)_اصلاح‌شده"].astype(str)
+grouped_df["مانده(بس)_اصلاح‌شده"] = grouped_df["مانده(بس)_اصلاح‌شده"].astype(str)
+
+grouped_df = grouped_df[["کد نهایی با استان", "عنوان نهایی با استان", "مانده(بد)_اصلاح‌شده", "مانده(بس)_اصلاح‌شده"]]
+
+output_grouped_path = f"خروجی_نهایی_تجمیعی_کد_با_استان_{now_str}.xlsx"
+with ExcelWriter(output_grouped_path, engine="xlsxwriter") as writer:
+    # شیت بدون عنوان
+    grouped_df.to_excel(writer, index=False, header=False, sheet_name="تجمیعی بدون عنوان")
+    # شیت با عنوان
+    grouped_df.to_excel(writer, index=False, header=True, sheet_name="تجمیعی با عنوان")
+
+print(f"\n✅ خروجی تجمیعی فیلترشده با اصلاح مقادیر منفی و تبدیل به متن در دو شیت ذخیره شد: {output_grouped_path}")
